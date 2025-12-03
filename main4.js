@@ -689,12 +689,12 @@ const controllerLeft = renderer.xr.getController(0);
 player.add(controllerLeft);
 
 // Trigger para atacar
-// controllerRight.addEventListener("selectstart", () => {
-//   if (!gameState.isSwinging && gameState.isAlive) {
-//     audioSystem.init();
-//     swingAxe();
-//   }
-// });
+controllerRight.addEventListener("selectstart", () => {
+  if (!gameState.isSwinging && gameState.isAlive) {
+    audioSystem.init();
+    swingAxe();
+  }
+});
 controllerRight.addEventListener("selectstart", () => {
   if (!gameState.isAlive) {
     location.reload();
