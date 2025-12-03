@@ -3,7 +3,6 @@ import { VRButton } from "three/addons/webxr/VRButton.js";
 import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
 import * as Tone from "tone";
 
-
 /**  CONFIGURACIÓN  */
 const CONFIG = {
   WORLD_SIZE: 200,
@@ -24,6 +23,19 @@ const CONFIG = {
   AXE_DAMAGE: 50,
   AXE_RANGE: 3.5,
   AXE_SWING_DURATION: 350,
+};
+
+/**  GAME STATE  */
+const gameState = {
+  health: CONFIG.MAX_HEALTH,
+  kills: 0,
+  startTime: Date.now(),
+  isAlive: true,
+  isSwinging: false,
+  lastSwingTime: 0,
+  gameTime: 0,
+  swingCooldown: 0.5,
+  lastSwingEndTime: 0,
 };
 
 /**  AUDIO HTML (Música de fondo)  */
@@ -144,10 +156,8 @@ const audioSystem = {
   }
 };
 
-// Inicializar audio ambiental
 ambientAudioSystem.init();
 
-// Reproducir música cuando el usuario interactúe
 document.addEventListener("click", () => {
   audioSystem.init();
   if (!ambientAudioSystem.isPlaying) {
@@ -155,7 +165,201 @@ document.addEventListener("click", () => {
   }
 }, { once: true });
 
-/**  DOM ELEMENTOS  */
+/**  HUD SYSTEM  */
+const hudSystem = {
+  canvas: null,
+  texture: null,
+  hudMesh: null,
+  gameOverCanvas: null,
+  gameOverTexture: null,
+  gameOverMesh: null,
+  lastDamageTime: 0,
+  
+  init(controller) {
+    // === HUD NORMAL ===
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = 512;
+    this.canvas.height = 256;
+    
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    const hudMaterial = new THREE.MeshBasicMaterial({ 
+      map: this.texture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    });
+    
+    const hudGeometry = new THREE.PlaneGeometry(0.8, 0.4);
+    this.hudMesh = new THREE.Mesh(hudGeometry, hudMaterial);
+    this.hudMesh.position.set(1.8, 1.3, -1.0);
+    this.hudMesh.rotation.x = 0;
+    this.hudMesh.renderOrder = 9999;
+    controller.add(this.hudMesh);
+    
+    // === GAME OVER SCREEN ===
+   this.gameOverCanvas = document.createElement('canvas');
+    this.gameOverCanvas.width = 1024;
+    this.gameOverCanvas.height = 768;
+    
+    this.gameOverTexture = new THREE.CanvasTexture(this.gameOverCanvas);
+    const gameOverMaterial = new THREE.MeshBasicMaterial({ 
+      map: this.gameOverTexture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false
+    });
+    
+    const gameOverGeometry = new THREE.PlaneGeometry(2.0, 1.5);
+    this.gameOverMesh = new THREE.Mesh(gameOverGeometry, gameOverMaterial);
+    this.gameOverMesh.position.set(0, 0, -1.5);
+    this.gameOverMesh.renderOrder = 10000;
+    this.gameOverMesh.visible = false;
+    controller.add(this.gameOverMesh);
+    
+    console.log("✅ HUD discreto inicializado en VR");
+  },
+  
+  update(health, kills, gameTime) {
+    if (!this.canvas) return;
+    
+    const ctx = this.canvas.getContext('2d');
+    const currentTime = Date.now();
+    const timeSinceDamage = currentTime - this.lastDamageTime;
+    const isDamaged = timeSinceDamage < 400;
+    
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // === DISEÑO MINIMALISTA ===
+    // Fondo oscuro muy sutil
+    ctx.fillStyle = 'rgba(10, 10, 15, 0.7)';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // Borde delgado elegante
+    ctx.strokeStyle = isDamaged ? '#ff3333' : '#444444';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(3, 3, this.canvas.width - 6, this.canvas.height - 6);
+    
+    // === SALUD EN LA PARTE SUPERIOR DERECHA ===
+    ctx.font = 'bold 28px Arial';
+    ctx.fillStyle = health > 50 ? '#00ff00' : health > 25 ? '#ffff00' : '#ff4444';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${health}%`, this.canvas.width - 30, 50);
+    
+    // === BARRA DE VIDA CENTRADA ===
+    const barWidth = 450;
+    const barHeight = 20;
+    const barX = (this.canvas.width - barWidth) / 2;
+    const barY = 100;
+    
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    
+    const healthPercent = Math.max(0, health / CONFIG.MAX_HEALTH);
+    ctx.fillStyle = health > 50 ? '#00dd00' : health > 25 ? '#ffdd00' : '#ff4444';
+    ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+    
+    ctx.strokeStyle = isDamaged ? '#ff3333' : '#555555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
+    
+    // === STATS EN LA PARTE INFERIOR ===
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'left';
+    
+    // Kills
+    ctx.fillStyle = '#00dd00';
+    ctx.fillText(`K: ${kills}`, 30, 230);
+    
+    // Tiempo
+    const minutes = Math.floor(gameTime / 60);
+    const seconds = gameTime % 60;
+    ctx.fillStyle = '#00dddd';
+    ctx.fillText(`T: ${minutes}:${seconds.toString().padStart(2, '0')}`, this.canvas.width - 150, 230);
+    
+    this.texture.needsUpdate = true;
+  },
+  
+  showGameOver(kills, time) {
+    if (!this.gameOverCanvas) return;
+    
+    const ctx = this.gameOverCanvas.getContext('2d');
+    
+    // Fondo oscuro con gradiente
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.gameOverCanvas.height);
+    gradient.addColorStop(0, 'rgba(20, 0, 0, 0.95)');
+    gradient.addColorStop(1, 'rgba(0, 0, 10, 0.95)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, this.gameOverCanvas.width, this.gameOverCanvas.height);
+    
+    // Borde rojo destacado
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(10, 10, this.gameOverCanvas.width - 20, this.gameOverCanvas.height - 20);
+    
+    // === GAME OVER ===
+    ctx.font = 'bold 150px Arial';
+    ctx.fillStyle = '#ff3333';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetX = 5;
+    ctx.shadowOffsetY = 5;
+    ctx.fillText('GAME OVER', this.gameOverCanvas.width / 2, 80);
+    
+    ctx.shadowColor = 'transparent';
+    
+    // === STATS FINALES ===
+    ctx.font = 'bold 60px Arial';
+    ctx.fillStyle = '#00ff00';
+    ctx.fillText(`KILLS: ${kills}`, this.gameOverCanvas.width / 2, 280);
+    
+    ctx.fillStyle = '#00ffff';
+    const minutes = Math.floor(time / 60);
+    const seconds = time % 60;
+    ctx.fillText(`TIME: ${minutes}:${seconds.toString().padStart(2, '0')}`, this.gameOverCanvas.width / 2, 380);
+    
+    // === BOTÓN DE REINTENTAR ===
+    const buttonY = 500;
+    const buttonWidth = 400;
+    const buttonHeight = 100;
+    const buttonX = (this.gameOverCanvas.width - buttonWidth) / 2;
+    
+    // Fondo del botón
+    ctx.fillStyle = '#00dd00';
+    ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+    
+    // Borde del botón
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+    
+    // Texto del botón
+    ctx.font = 'bold 60px Arial';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('REINTENTAR', this.gameOverCanvas.width / 2, buttonY + 20);
+    
+    // Instrucción
+    ctx.font = 'bold 30px Arial';
+    ctx.fillStyle = '#ffff00';
+    ctx.fillText('Presiona Trigger para reintentar', this.gameOverCanvas.width / 2, 650);
+    
+    this.gameOverTexture.needsUpdate = true;
+    this.gameOverMesh.visible = true;
+  },
+  
+  hideGameOver() {
+    this.gameOverMesh.visible = false;
+  },
+  
+  recordDamage() {
+    this.lastDamageTime = Date.now();
+  }
+};
+
+/**  DOM ELEMENTOS (Para Game Over)  */
 const hudHealth = document.getElementById("healthValue");
 const hudHealthFill = document.getElementById("healthFill");
 const hudKills = document.getElementById("killCount");
@@ -163,19 +367,6 @@ const hudTime = document.getElementById("timeValue");
 const gameOverScreen = document.getElementById("gameOver");
 const finalKills = document.getElementById("finalKills");
 const finalTime = document.getElementById("finalTime");
-
-console.log("DOM Elements cargados");
-
-/**  GAME STATE  */
-const gameState = {
-  health: CONFIG.MAX_HEALTH,
-  kills: 0,
-  startTime: Date.now(),
-  isAlive: true,
-  isSwinging: false,
-  lastSwingTime: 0,
-  gameTime: 0,
-};
 
 /**  RENDERER & SCENE  */
 const canvas = document.getElementById("scene");
@@ -486,6 +677,8 @@ document.body.appendChild(VRButton.createButton(renderer));
 const controllerRight = renderer.xr.getController(1);
 player.add(controllerRight);
 controllerRight.add(axeGroup);
+// Inicializar HUD en el controlador derecho
+hudSystem.init(controllerRight);
 
 const controllerModelFactory = new XRControllerModelFactory();
 const gripRight = renderer.xr.getControllerGrip(1);
@@ -500,6 +693,11 @@ controllerRight.addEventListener("selectstart", () => {
   if (!gameState.isSwinging && gameState.isAlive) {
     audioSystem.init();
     swingAxe();
+  }
+});
+controllerRight.addEventListener("selectstart", () => {
+  if (!gameState.isAlive) {
+    location.reload();
   }
 });
 
@@ -878,13 +1076,9 @@ function gameOver() {
   audioSystem.playGameOver();
 
   const survivalTime = Math.floor((Date.now() - gameState.startTime) / 1000);
-  const minutes = Math.floor(survivalTime / 60);
-  const seconds = survivalTime % 60;
-
-  finalKills.textContent = gameState.kills;
-  finalTime.textContent = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-
-  gameOverScreen.classList.add("show");
+  
+  // Mostrar Game Over en VR
+  hudSystem.showGameOver(gameState.kills, survivalTime);
 }
 
 /**  ACTUALIZAR TIEMPO  */
@@ -907,7 +1101,7 @@ renderer.setAnimationLoop(() => {
   if (renderer.xr.isPresenting) {
     updateVRMovement(dt);
   }
-
+  hudSystem.update(gameState.health, gameState.kills, gameState.gameTime);
   updateZombies(dt);
   updateGameTime();
   skySystem.update(gameState.gameTime);
