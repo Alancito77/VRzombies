@@ -695,11 +695,11 @@ controllerRight.addEventListener("selectstart", () => {
     swingAxe();
   }
 });
-controllerRight.addEventListener("selectstart", () => {
-  if (!gameState.isAlive) {
-    location.reload();
-  }
-});
+// controllerRight.addEventListener("selectstart", () => {
+//   if (!gameState.isAlive) {
+//     location.reload();
+//   }
+// });
 
 /**  ATAQUE CON HACHA MEJORADO  */
 function swingAxe() {
