@@ -689,12 +689,21 @@ const controllerLeft = renderer.xr.getController(0);
 player.add(controllerLeft);
 
 // Trigger para atacar
-controllerRight.addEventListener("selectstart", () => {
-  if (!gameState.isSwinging && gameState.isAlive) {
-    audioSystem.init();
-    swingAxe();
+controllerRight.addEventListener("selectstart", (event) => {
+  console.log("Trigger presionado - isAlive:", gameState.isAlive, "isSwinging:", gameState.isSwinging);
+  
+  if (gameState.isAlive) {
+    if (!gameState.isSwinging) {
+      audioSystem.init();
+      swingAxe();
+      console.log("✅ Swing ejecutado");
+    }
+  } else {
+    console.log("🔄 Recargando...");
+    location.reload();
   }
 });
+
 
 /**  ATAQUE CON HACHA MEJORADO  */
 function swingAxe() {
