@@ -634,7 +634,7 @@ const axeSystem = {
     this.handle.castShadow = true;
     this.group.add(this.handle);
 
-    // Cabeza del hacha 
+    // Cabeza del hacha - mejorada
     const bladeGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.08);
     const bladeMaterial = new THREE.MeshStandardMaterial({
       color: 0xcccccc,
@@ -689,21 +689,17 @@ const controllerLeft = renderer.xr.getController(0);
 player.add(controllerLeft);
 
 // Trigger para atacar
-controllerRight.addEventListener("selectstart", (event) => {
-  console.log("Trigger presionado - isAlive:", gameState.isAlive, "isSwinging:", gameState.isSwinging);
-  
-  if (gameState.isAlive) {
-    if (!gameState.isSwinging) {
-      audioSystem.init();
-      swingAxe();
-      console.log("✅ Swing ejecutado");
-    }
-  } else {
-    console.log("🔄 Recargando...");
+// controllerRight.addEventListener("selectstart", () => {
+//   if (!gameState.isSwinging && gameState.isAlive) {
+//     audioSystem.init();
+//     swingAxe();
+//   }
+// });
+controllerRight.addEventListener("selectstart", () => {
+  if (!gameState.isAlive) {
     location.reload();
   }
 });
-
 
 /**  ATAQUE CON HACHA MEJORADO  */
 function swingAxe() {
