@@ -634,7 +634,7 @@ const axeSystem = {
     this.handle.castShadow = true;
     this.group.add(this.handle);
 
-    // Cabeza del hacha - mejorada
+    // Cabeza del hacha 
     const bladeGeometry = new THREE.BoxGeometry(0.4, 0.3, 0.08);
     const bladeMaterial = new THREE.MeshStandardMaterial({
       color: 0xcccccc,
@@ -693,11 +693,6 @@ controllerRight.addEventListener("selectstart", () => {
   if (!gameState.isSwinging && gameState.isAlive) {
     audioSystem.init();
     swingAxe();
-  }
-});
-controllerRight.addEventListener("selectstart", () => {
-  if (!gameState.isAlive) {
-    location.reload();
   }
 });
 
