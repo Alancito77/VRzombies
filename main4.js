@@ -693,6 +693,7 @@ controllerRight.addEventListener("selectstart", () => {
   if (!gameState.isSwinging && gameState.isAlive) {
     audioSystem.init();
     swingAxe();
+    location.reload();
   }
 });
 // controllerRight.addEventListener("selectstart", () => {
